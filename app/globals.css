@@ -1,26 +1,137 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ---- Design tokens (Tailwind v4 reads --color-* / --font-* and generates utilities) ---- */
+@theme {
+  /* Fonts */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
+
+  /* Brand */
+  --color-brand: #4f46e5; /* indigo-600 */
+  --color-brand-soft: #6366f1; /* indigo-500 */
+  --color-violet: #8b5cf6; /* violet-500 */
+
+  /* Surfaces & ink */
+  --color-bg: #f8fafc; /* app background */
+  --color-surface: #ffffff; /* cards */
+  --color-border: #e2e8f0; /* slate-200 */
+  --color-ink: #0f172a; /* slate-900 headings */
+  --color-ink-soft: #475569; /* slate-600 body */
+  --color-muted: #94a3b8; /* slate-400 */
+
+  /* Status */
+  --color-success: #10b981; /* emerald-500 */
+  --color-danger: #ef4444; /* red-500 */
+
+  /* Animations (Tailwind generates animate-* from these) */
+  --animate-fade-in: fade-in 0.5s ease-out both;
+  --animate-fade-up: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-scale-in: scale-in 0.25s ease-out both;
+  --animate-msg-in: msg-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-shimmer: shimmer 1.5s linear infinite;
+  --animate-slide-in-left: slide-in-left 0.25s ease-out both;
+  --animate-slide-in-right: slide-in-right 0.25s ease-out both;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+@keyframes slide-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
   }
 }
 
+/* ---- Base ---- */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-ink-soft);
+  font-family: var(--font-sans);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  color: var(--color-ink);
+}
+
+/* A soft skeleton shimmer used for loading placeholders */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #eef2f7 25%,
+    #f8fafc 37%,
+    #eef2f7 63%
+  );
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+/* Slim, unobtrusive scrollbars for the chat + rails */
+.scroll-soft {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.scroll-soft::-webkit-scrollbar {
+  width: 8px;
+}
+.scroll-soft::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
 }

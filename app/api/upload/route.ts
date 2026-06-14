@@ -106,7 +106,8 @@ export async function POST(request: Request) {
     console.error("Upload error:", error);
     return NextResponse.json(
       {
-        error: "Failed to process the PDF. Please try again. ",
+        error: "Failed to process the PDF. Please try again.",
+        code: "GENERIC",
       },
       { status: 500 },
     );

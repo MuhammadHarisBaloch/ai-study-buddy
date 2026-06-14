@@ -9,6 +9,9 @@ import DocumentsRail from "@/app/components/study/DocumentsRail";
 import PlusMenu from "@/app/components/study/PlusMenu";
 import QuizCard from "@/app/components/study/QuizCard";
 import SummaryCard from "@/app/components/study/SummaryCard";
+import { useToasts, ToastViewport } from "@/app/components/Toast";
+import { friendlyError } from "@/app/lib/clientError";
+import ConfirmModal from "@/app/components/ConfirmModal";
 
 // The chat stream mixes saved chat turns with (ephemeral) quiz/summary cards.
 type StreamItem =
@@ -23,18 +26,20 @@ export default function StudyApp({
   userName: string;
   userImage: string | null;
 }) {
+  // --- toasts (all error feedback goes through here) ---
+  const { toasts, pushToast, dismissToast } = useToasts();
+
   // --- documents ---
   const [documents, setDocuments] = useState<studyDocument[]>([]);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(
     null,
   );
   const [docsLoading, setDocsLoading] = useState(true);
-  const [docsError, setDocsError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   // --- upload ---
   const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- chat stream ---
@@ -43,7 +48,6 @@ export default function StudyApp({
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [generating, setGenerating] = useState<null | "quiz" | "summary">(null);
-  const [error, setError] = useState<string | null>(null);
 
   // --- mobile drawers ---
   const [leftOpen, setLeftOpen] = useState(false);
@@ -54,16 +58,18 @@ export default function StudyApp({
   const refreshDocuments = useCallback(async () => {
     try {
       const res = await fetch("/api/documents");
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load documents.");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        pushToast({ message: friendlyError(res.status, data?.code, data?.error) });
+        return;
+      }
       setDocuments(data.documents);
-      setDocsError(null);
-    } catch (e) {
-      setDocsError(e instanceof Error ? e.message : "Failed to load documents.");
+    } catch {
+      pushToast({ message: friendlyError() });
     } finally {
       setDocsLoading(false);
     }
-  }, []);
+  }, [pushToast]);
 
   useEffect(() => {
     void (async () => {
@@ -80,27 +86,36 @@ export default function StudyApp({
         return;
       }
       setHistoryLoading(true);
-      setError(null);
       try {
         const res = await fetch(
           `/api/messages?documentId=${selectedDocumentId}`,
         );
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (cancelled) return;
-        if (!res.ok) throw new Error(data.error || "Failed to load history.");
+        if (!res.ok) {
+          pushToast({
+            message: friendlyError(res.status, data?.code, data?.error),
+          });
+          return;
+        }
+        type HistoryRow = {
+          role: "user" | "assistant";
+          kind: "chat" | "quiz" | "summary";
+          content: string;
+          data: quizQuestion[] | null;
+        };
         setItems(
-          (data.messages as { role: "user" | "assistant"; content: string }[]).map(
-            (m) => ({
-              id: crypto.randomUUID(),
-              kind: "msg" as const,
-              role: m.role,
-              content: m.content,
-            }),
-          ),
+          (data.messages as HistoryRow[]).map((m): StreamItem => {
+            const id = crypto.randomUUID();
+            if (m.kind === "quiz")
+              return { id, kind: "quiz", questions: m.data ?? [] };
+            if (m.kind === "summary")
+              return { id, kind: "summary", content: m.content };
+            return { id, kind: "msg", role: m.role, content: m.content };
+          }),
         );
-      } catch (e) {
-        if (!cancelled)
-          setError(e instanceof Error ? e.message : "Failed to load history.");
+      } catch {
+        if (!cancelled) pushToast({ message: friendlyError() });
       } finally {
         if (!cancelled) setHistoryLoading(false);
       }
@@ -108,7 +123,7 @@ export default function StudyApp({
     return () => {
       cancelled = true;
     };
-  }, [selectedDocumentId]);
+  }, [selectedDocumentId, pushToast]);
 
   // Auto-scroll to the newest item.
   useEffect(() => {
@@ -134,47 +149,57 @@ export default function StudyApp({
 
   function handleSelect(id: string) {
     setSelectedDocumentId(id);
-    setError(null);
     setLeftOpen(false);
     setRightOpen(false);
   }
 
-  async function handleDeleted(id: string) {
-    if (!window.confirm("Delete this document and its notes?")) return;
+  // Clicking "Delete" opens the confirmation modal; the actual delete runs on confirm.
+  function handleDeleted(id: string) {
+    setPendingDeleteId(id);
+  }
+
+  async function confirmDelete() {
+    const id = pendingDeleteId;
+    if (!id) return;
     setDeletingId(id);
-    setDocsError(null);
     try {
       const res = await fetch(`/api/documents/${id}`, { method: "DELETE" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to delete document.");
+        pushToast({
+          message: friendlyError(res.status, data?.code, data?.error),
+        });
+        return;
       }
       if (selectedDocumentId === id) {
         setSelectedDocumentId(null);
         setItems([]);
       }
       await refreshDocuments();
-    } catch (e) {
-      setDocsError(
-        e instanceof Error ? e.message : "Failed to delete document.",
-      );
+    } catch {
+      pushToast({ message: friendlyError() });
     } finally {
       setDeletingId(null);
+      setPendingDeleteId(null);
     }
   }
 
   async function uploadFile(file: File) {
     setUploading(true);
-    setUploadError(null);
     try {
       const fd = new FormData();
       fd.append("file", file);
       const res = await fetch("/api/upload", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed.");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        pushToast({
+          message: friendlyError(res.status, data?.code, data?.error),
+        });
+        return;
+      }
       handleUploaded(data.documentId);
-    } catch (e) {
-      setUploadError(e instanceof Error ? e.message : "Upload failed.");
+    } catch {
+      pushToast({ message: friendlyError() });
     } finally {
       setUploading(false);
     }
@@ -195,7 +220,6 @@ export default function StudyApp({
       { id: crypto.randomUUID(), kind: "msg", role: "user", content: text },
     ]);
     setInput("");
-    setError(null);
     setLoading(true);
 
     try {
@@ -207,8 +231,13 @@ export default function StudyApp({
           documentId: selectedDocumentId,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Request failed.");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        pushToast({
+          message: friendlyError(res.status, data?.code, data?.error),
+        });
+        return;
+      }
       setItems((prev) => [
         ...prev,
         {
@@ -218,8 +247,8 @@ export default function StudyApp({
           content: data.reply,
         },
       ]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } catch {
+      pushToast({ message: friendlyError() });
     } finally {
       setLoading(false);
     }
@@ -228,21 +257,25 @@ export default function StudyApp({
   async function generateQuiz() {
     if (!selectedDocumentId || generating || loading) return;
     setGenerating("quiz");
-    setError(null);
     try {
       const res = await fetch("/api/quiz", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ documentId: selectedDocumentId }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to generate quiz.");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        pushToast({
+          message: friendlyError(res.status, data?.code, data?.error),
+        });
+        return;
+      }
       setItems((prev) => [
         ...prev,
         { id: crypto.randomUUID(), kind: "quiz", questions: data.questions },
       ]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to generate quiz.");
+    } catch {
+      pushToast({ message: friendlyError() });
     } finally {
       setGenerating(null);
     }
@@ -251,21 +284,25 @@ export default function StudyApp({
   async function generateSummary() {
     if (!selectedDocumentId || generating || loading) return;
     setGenerating("summary");
-    setError(null);
     try {
       const res = await fetch("/api/summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ documentId: selectedDocumentId }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to summarize.");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        pushToast({
+          message: friendlyError(res.status, data?.code, data?.error),
+        });
+        return;
+      }
       setItems((prev) => [
         ...prev,
         { id: crypto.randomUUID(), kind: "summary", content: data.summary },
       ]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to summarize.");
+    } catch {
+      pushToast({ message: friendlyError() });
     } finally {
       setGenerating(null);
     }
@@ -292,7 +329,6 @@ export default function StudyApp({
     onDelete: handleDeleted,
     deletingId,
     loading: docsLoading,
-    error: docsError,
   };
 
   return (
@@ -393,11 +429,6 @@ export default function StudyApp({
                   </div>
                 )}
 
-                {error && (
-                  <div className="rounded-xl bg-red-50 px-4 py-2.5 text-sm text-danger">
-                    {error}
-                  </div>
-                )}
                 <div ref={messagesEndRef} />
               </div>
             )}
@@ -405,13 +436,9 @@ export default function StudyApp({
 
           {/* Input bar with the "+" menu */}
           <div className="shrink-0 border-t border-border bg-surface p-3 sm:p-4">
-            {(uploading || uploadError) && (
+            {uploading && (
               <div className="mx-auto mb-2 flex w-full max-w-2xl items-center gap-2 px-1 text-xs">
-                {uploading ? (
-                  <span className="text-muted">Uploading and processing…</span>
-                ) : (
-                  <span className="text-danger">{uploadError}</span>
-                )}
+                <span className="text-muted">Uploading and processing…</span>
               </div>
             )}
             <div className="mx-auto flex w-full max-w-2xl items-center gap-2">
@@ -479,6 +506,18 @@ export default function StudyApp({
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={pendingDeleteId !== null}
+        title="Delete document"
+        message="Delete this document and its notes?"
+        confirmLabel="Delete"
+        busy={deletingId !== null && deletingId === pendingDeleteId}
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDeleteId(null)}
+      />
+
+      <ToastViewport toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

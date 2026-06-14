@@ -17,14 +17,25 @@ export async function DELETE(
 
   const { id } = await params;
 
-  // deleteMany filtered by BOTH id and userId = you can only delete your OWN document.
-  // If it matched 0 rows, it wasn't yours (or doesn't exist) → 404.
-  const result = await prisma.document.deleteMany({
-    where: { id, userId: session.user.id },
-  });
+  try {
+    // deleteMany filtered by BOTH id and userId = you can only delete your OWN document.
+    // If it matched 0 rows, it wasn't yours (or doesn't exist) → 404.
+    const result = await prisma.document.deleteMany({
+      where: { id, userId: session.user.id },
+    });
 
-  if (result.count === 0) {
-    return NextResponse.json({ error: "Document not found." }, { status: 404 });
+    if (result.count === 0) {
+      return NextResponse.json(
+        { error: "Document not found." },
+        { status: 404 },
+      );
+    }
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("document DELETE error:", error);
+    return NextResponse.json(
+      { error: "Something went wrong. Please try again.", code: "GENERIC" },
+      { status: 500 },
+    );
   }
-  return NextResponse.json({ ok: true });
 }

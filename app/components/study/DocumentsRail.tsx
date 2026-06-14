@@ -10,7 +10,6 @@ export default function DocumentsRail({
   onDelete,
   deletingId,
   loading,
-  error,
 }: {
   documents: studyDocument[];
   selectedId: string | null;
@@ -18,7 +17,6 @@ export default function DocumentsRail({
   onDelete: (id: string) => void;
   deletingId: string | null;
   loading: boolean;
-  error: string | null;
 }) {
   return (
     <div className="flex h-full flex-col">
@@ -29,12 +27,6 @@ export default function DocumentsRail({
         </svg>
         <h2 className="font-display text-sm font-semibold text-ink">Documents</h2>
       </div>
-
-      {error && (
-        <p className="mx-3 mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-danger">
-          {error}
-        </p>
-      )}
 
       <div className="scroll-soft flex-1 space-y-2 overflow-y-auto px-3 pb-3">
         {loading && (

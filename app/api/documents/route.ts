@@ -12,15 +12,23 @@ export async function GET() {
     );
   }
 
-  const documents = await prisma.document.findMany({
-    where: { userId: session.user.id },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      filename: true,
-      createdAt: true,
-      _count: { select: { chunks: true } }, // how many chunks (handy to display)
-    },
-  });
-  return NextResponse.json({ documents });
+  try {
+    const documents = await prisma.document.findMany({
+      where: { userId: session.user.id },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        filename: true,
+        createdAt: true,
+        _count: { select: { chunks: true } }, // how many chunks (handy to display)
+      },
+    });
+    return NextResponse.json({ documents });
+  } catch (error) {
+    console.error("documents GET error:", error);
+    return NextResponse.json(
+      { error: "Something went wrong. Please try again.", code: "GENERIC" },
+      { status: 500 },
+    );
+  }
 }

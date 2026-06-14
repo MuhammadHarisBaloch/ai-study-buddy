@@ -93,11 +93,14 @@ model VerificationToken {
     @@unique([identifier, token])
 }
 
-// One chat message (a question or an answer), tied to a document and its owner.
+// One item in a document's history stream. Originally only chat turns; now also the
+// generated quizzes and summaries, so reopening a document restores everything in order.
 model Message {
     id         String   @id @default(cuid())
     role       String   // "user" | "assistant"
-    content    String
+    kind       String   @default("chat") // "chat" | "quiz" | "summary"
+    content    String   // chat/summary text; "" for quiz (questions live in `data`)
+    data       Json?    // quiz questions array; null for chat/summary
     documentId String
     document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
     userId     String

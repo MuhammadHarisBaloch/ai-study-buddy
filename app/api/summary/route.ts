@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getStudyChunks } from "@/app/lib/notes";
 import { summarizeNotes } from "@/app/lib/gemini";
 import { auth } from "@/app/lib/auth";
+import { toApiError } from "@/app/lib/apiError";
+import { prisma } from "@/app/lib/prisma";
 
 // POST /api/summary — summarize the SIGNED-IN user's stored notes.
 export async function POST(request: Request) {
@@ -26,11 +28,22 @@ export async function POST(request: Request) {
     }
 
     const summary = await summarizeNotes(chunks);
+
+    // Save to history so the summary reappears when the user reopens this document.
+    await prisma.message.create({
+      data: {
+        role: "assistant",
+        kind: "summary",
+        content: summary,
+        documentId,
+        userId: session.user.id,
+      },
+    });
+
     return NextResponse.json({ summary });
   } catch (error) {
     console.error("summary API error:", error);
-    const message =
-      error instanceof Error ? error.message : "Something went wrong.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const { status, code, message } = toApiError(error);
+    return NextResponse.json({ error: message, code }, { status });
   }
 }

@@ -4,6 +4,7 @@ import { findRelevantChunks } from "@/app/lib/retrieval";
 import { auth } from "@/app/lib/auth";
 import type { chatMessage } from "@/app/types/chat";
 import { prisma } from "@/app/lib/prisma";
+import { toApiError } from "@/app/lib/apiError";
 
 // Runs on the SERVER. POST /api/chat — answers from the SIGNED-IN user's notes (RAG).
 export async function POST(request: Request) {
@@ -82,8 +83,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ reply });
   } catch (error) {
     console.error("chat API error:", error);
-    const message =
-      error instanceof Error ? error.message : "Something went wrong.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const { status, code, message } = toApiError(error);
+    return NextResponse.json({ error: message, code }, { status });
   }
 }
